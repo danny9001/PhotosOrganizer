@@ -1,3 +1,8 @@
+# Photos & Videos Organizer (v2)
+# Fotos01 – Organizador de fotos y videos (v2)
+
+This README is available in **Spanish** and **English**. / Este README está disponible en **español** e **inglés**.
+
 ## 🇬🇧 English
 
 ### Description
@@ -78,12 +83,6 @@ When `-LogCsv` is provided, a CSV is generated with columns like: `SourcePath, T
   ```powershell
   Unblock-File .\Fotos01.ps1
   ```
----
-
-# Fotos01 – Organizador de fotos y videos (v2)
-# Photos & Videos Organizer (v2)
-
-Este README está disponible en **español** e **inglés**. / This README is available in **Spanish** and **English**.
 
 ---
 
