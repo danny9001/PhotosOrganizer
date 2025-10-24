@@ -12,11 +12,11 @@ EXAMPLES
 
 [CmdletBinding(SupportsShouldProcess = $true)]
 param(
-    [Parameter(Mandatory = $true)]
+    [Parameter(Mandatory = $true, HelpMessage = "Carpeta de origen de los archivos")]
     [ValidateScript({ Test-Path $_ -PathType Container })]
     [string]$Source,
 
-    [Parameter(Mandatory = $true)]
+    [Parameter(Mandatory = $true, HelpMessage = "Carpeta destino para organizar los archivos")]
     [string]$Destination,
 
     # 'Year' (por defecto) o 'YearMonth'
@@ -24,14 +24,13 @@ param(
     [string]$GroupBy = 'Year',
 
     # Exporta un log CSV opcional
+    [ValidateScript({ !$_.Length -or $_.ToLower().EndsWith('.csv') })]
     [string]$LogCsv,
 
-    # Extensiones soportadas
-    [string[]]$IncludeExtensions = @(
-        'jpg','jpeg','jpe','tif','tiff','png','bmp','gif','heic','heif',
-        'dng','cr2','nef','arw','rw2','orf','srw','raf',
-        'mp4','mov','m4v','avi','wmv','mkv','mts','m2ts','3gp'
-    ),
+    # Extensiones soportadas (separadas por tipo)
+    [string[]]$ImageExtensions = @('jpg','jpeg','jpe','tif','tiff','png','bmp','gif','heic','heif')
+    [string[]]$RawExtensions   = @('dng','cr2','nef','arw','rw2','orf','srw','raf')
+    [string[]]$VideoExtensions = @('mp4','mov','m4v','avi','wmv','mkv','mts','m2ts','3gp')
 
     # Copiar en vez de mover
     [switch]$CopyInsteadOfMove,
@@ -46,7 +45,7 @@ param(
 begin {
     Write-Verbose "Inicializando..."
 
-    $normalizedExts = $IncludeExtensions | ForEach-Object {
+    $normalizedExts = @($ImageExtensions + $RawExtensions + $VideoExtensions) | ForEach-Object {
         if ($_ -notmatch '^\.') { ".$_" } else { $_ }
     }
 
@@ -58,9 +57,14 @@ begin {
     $script:LogItems = New-Object System.Collections.Generic.List[object]
 
     # Extensiones tratadas como imagen para intentar EXIF
-    $script:ImageExts = @('.jpg','.jpeg','.jpe','.tif','.tiff','.png','.bmp','.gif','.heic','.heif','.dng','.cr2','.nef','.arw','.rw2','.orf','.srw','.raf')
+    $script:ImageExts = @($ImageExtensions + $RawExtensions) | ForEach-Object {
+        if ($_ -notmatch '^\.') { ".$_" } else { $_ }
+    }
 
     try { Add-Type -AssemblyName System.Drawing -ErrorAction SilentlyContinue | Out-Null } catch {}
+    $script:TotalFiles = 0
+    $script:SuccessFiles = 0
+    $script:ErrorFiles = 0
 }
 
 process {
@@ -243,7 +247,11 @@ process {
         $normalizedExts -contains $_.Extension.ToLowerInvariant()
     }
 
+    $script:TotalFiles = $files.Count
+    $i = 0
     foreach ($f in $files) {
+        $i++
+        Write-Progress -Activity "Procesando archivos" -Status "Archivo $i de $($script:TotalFiles)" -PercentComplete (($i/$script:TotalFiles)*100)
         try {
             $meta = Get-CaptureOrModifiedDate -File $f
             $dt   = $meta.Date
@@ -308,6 +316,7 @@ process {
                 Status        = "OK"
                 ErrorMessage  = $null
             }) | Out-Null
+            $script:SuccessFiles++
         } catch {
             $script:LogItems.Add([pscustomobject]@{
                 SourcePath    = $f.FullName
@@ -322,8 +331,10 @@ process {
                 ErrorMessage  = $_.Exception.Message
             }) | Out-Null
             Write-Warning "Error con '$($f.FullName)': $($_.Exception.Message)"
+            $script:ErrorFiles++
         }
     }
+    Write-Progress -Activity "Procesando archivos" -Completed
 }
 
 end {
@@ -332,6 +343,10 @@ end {
             $script:LogItems | Export-Csv -Path $LogCsv -NoTypeInformation -Encoding UTF8
             Write-Host "Log guardado en: $LogCsv"
         }
+        Write-Host "\nResumen:"
+        Write-Host "Total de archivos procesados: $($script:TotalFiles)"
+        Write-Host "Exitosos: $($script:SuccessFiles)"
+        Write-Host "Errores: $($script:ErrorFiles)"
     } finally {
         if ($script:ShellApp) {
             [System.Runtime.InteropServices.Marshal]::ReleaseComObject($script:ShellApp) | Out-Null
